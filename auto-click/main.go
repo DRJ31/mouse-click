@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/go-vgo/robotgo"
+	hook "github.com/robotn/gohook"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -12,13 +12,9 @@ import (
 )
 
 type Config struct {
-	Sleep       int      `json:"sleep"`
-	Offset      int      `json:"offset"`
-	StartPos    Position `json:"start_pos"`
-	PicPos      Picture  `json:"pic_pos"`
-	TagPos      Position `json:"tag_pos"`
-	BtnPos      Position `json:"btn_pos"`
-	RandomRange Range    `json:"random_range"`
+	Offset int      `json:"offset"`
+	TagPos Position `json:"tag_pos"`
+	BtnPos Position `json:"btn_pos"`
 }
 
 type Picture struct {
@@ -61,55 +57,83 @@ func randInt(min, max int) int {
 	return min + r.Intn(max-min)
 }
 
-func calculatePos(ratioX, ratioY float64, size Picture) Position {
+func calculatePos(ratio float64, size Picture) Position {
 	var position Position
-	position.X = size.X1 + int(math.Floor(float64(size.X2-size.X1)*ratioX))
-	position.Y = size.Y1 + int(math.Floor(float64(size.Y2-size.Y1)*ratioY))
+	if ratio > 0 {
+		if math.Abs(float64(size.Y2-size.Y1)) > math.Abs(float64(size.X2-size.X1)) {
+			position.X = size.X2
+			position.Y = size.Y1 + int(math.Floor(float64(size.Y2-size.Y1)*ratio))
+		} else {
+			position.X = size.X1 + int(math.Floor(float64(size.X2-size.X1)*ratio))
+			position.Y = size.Y2
+		}
+	} else {
+		if math.Abs(float64(size.Y2-size.Y1)) > math.Abs(float64(size.X2-size.X1)) {
+			position.X = size.X2
+			position.Y = size.Y2
+		} else {
+			position.X = size.X2 + int(math.Floor(float64(size.X2-size.X1)*ratio))
+			position.Y = size.Y2
+		}
+	}
 	return position
 }
 
 func main() {
 	config := readConfig("config.json")
-	ran := config.RandomRange
-	var times int
 
-	fmt.Print("请输入循环次数：")
-	_, err := fmt.Scanln(&times)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("Sleep for %d seconds.", config.Sleep)
-	robotgo.Sleep(config.Sleep)
-	//robotgo.MoveClick(config.StartPos.X, config.StartPos.Y)
+	for {
+		var x1, y1, x2, y2 int
+		robotgo.MoveClick(config.TagPos.X, config.TagPos.Y)
 
-	for i := 0; i < times; i++ {
-		robotgo.MoveClick(config.TagPos.X, config.TagPos.Y)
-		// Person
-		pos := calculatePos(0.3, 0.2, config.PicPos)
-		robotgo.MoveClick(pos.X+randInt(ran.Min, ran.Max), pos.Y+randInt(ran.Min, ran.Max))
-		pos = calculatePos(0.6, 0.7, config.PicPos)
-		robotgo.Move(pos.X+randInt(ran.Min, ran.Max), pos.Y+randInt(ran.Min, ran.Max))
-		robotgo.Click("left")
-		robotgo.MoveClick(config.TagPos.X, config.TagPos.Y)
+		robotgo.EventHook(hook.KeyDown, []string{"c"}, func(e hook.Event) {
+			robotgo.Click()
+			x1, y1 = robotgo.GetMousePos()
+		})
+		robotgo.EventHook(hook.KeyDown, []string{"z"}, func(e hook.Event) {
+			robotgo.Click()
+			x2, y2 = robotgo.GetMousePos()
+			robotgo.MoveClick(config.TagPos.X, config.TagPos.Y)
+			robotgo.EventEnd()
+		})
+		s := robotgo.EventStart()
+		<-robotgo.EventProcess(s)
 
 		// Helmet
-		pos = calculatePos(0.31, 0.21, config.PicPos)
-		robotgo.MoveClick(pos.X+randInt(ran.Min, ran.Max), pos.Y+randInt(ran.Min, ran.Max))
-		pos = calculatePos(0.59, 0.3, config.PicPos)
-		robotgo.Move(pos.X+randInt(ran.Min, ran.Max), pos.Y+randInt(ran.Min, ran.Max))
+		pos := Position{
+			X: x1,
+			Y: y1,
+		}
+		robotgo.MoveClick(pos.X, pos.Y)
+		pos = calculatePos(0.25, Picture{
+			X1: x1,
+			Y1: y1,
+			X2: x2,
+			Y2: y2,
+		})
+		robotgo.Move(pos.X, pos.Y)
 		robotgo.Click("left")
 		robotgo.MoveClick(config.TagPos.X, config.TagPos.Y+config.Offset)
 
 		// Clothes
-		pos = calculatePos(0.31, 0.31, config.PicPos)
-		robotgo.MoveClick(pos.X+randInt(ran.Min, ran.Max), pos.Y+randInt(ran.Min, ran.Max))
-		pos = calculatePos(0.59, 0.69, config.PicPos)
-		robotgo.Move(pos.X+randInt(ran.Min, ran.Max), pos.Y+randInt(ran.Min, ran.Max))
+		if math.Abs(float64(y2-y1)) > math.Abs(float64(x2-x1)) {
+			pos.X = x1
+			pos.Y = y1 + int(math.Floor(float64(y2-y1)*0.25))
+		} else {
+			pos.X = x2
+			pos.Y = y1
+		}
+		robotgo.MoveClick(pos.X, pos.Y)
+		pos = calculatePos(-0.75, Picture{
+			X1: x1,
+			Y1: y1,
+			X2: x2,
+			Y2: y2,
+		})
+		robotgo.Move(pos.X, pos.Y)
 		robotgo.Click("left")
 		robotgo.MoveClick(config.TagPos.X, config.TagPos.Y+config.Offset*2)
 
 		robotgo.MoveClick(config.BtnPos.X, config.BtnPos.Y)
-		fmt.Printf("Loop %d finish, sleep for %d seconds.\n", i+1, config.Sleep)
-		robotgo.Sleep(config.Sleep)
 	}
 }
